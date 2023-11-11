@@ -1,16 +1,16 @@
 package com.example.audionormalizer
 
+import android.content.Context
+import android.media.AudioManager
 import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,8 +22,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.example.audionormalizer.ui.theme.AudioNormalizerTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -32,6 +32,9 @@ import com.google.accompanist.permissions.shouldShowRationale
 import kotlinx.parcelize.Parcelize
 
 class MainActivity : ComponentActivity() {
+
+    private val visualizer = Visualizer(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -41,80 +44,100 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    FeatureThatRequiresRecordAudioPermission()
+                    FeatureThatRequiresRecordAudioPermission(visualizer)
                 }
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        visualizer.release()
+    }
 }
 
-sealed interface WaveformStatus {
+sealed interface MeasurementPeakRmsStatus {
     @Parcelize
-    data object NotRecording : WaveformStatus, Parcelable
+    data class Success(val peak: Int, val rms: Int) : MeasurementPeakRmsStatus, Parcelable
     @Parcelize
-    data class Success(val waveformTextValue: String) : WaveformStatus, Parcelable
+    data object NotRecording : MeasurementPeakRmsStatus, Parcelable
     @Parcelize
-    data object Error : WaveformStatus, Parcelable
+    data object Error : MeasurementPeakRmsStatus, Parcelable
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-private fun FeatureThatRequiresRecordAudioPermission() {
+private fun FeatureThatRequiresRecordAudioPermission(visualizer: Visualizer) {
     val recordAudioPermissionState = rememberPermissionState(
         android.Manifest.permission.RECORD_AUDIO
     )
 
     var isRecording by rememberSaveable { mutableStateOf(false) }
-    var isFinished by rememberSaveable { mutableStateOf(false) }
-    var waveformText by rememberSaveable { mutableStateOf("") }
-    var waveformStatus: WaveformStatus by rememberSaveable { mutableStateOf(WaveformStatus.NotRecording) }
+    var measurementPeakRmsStatus: MeasurementPeakRmsStatus by rememberSaveable { mutableStateOf(MeasurementPeakRmsStatus.NotRecording) }
+    var peakText by rememberSaveable { mutableStateOf("") }
+    var rmsText by rememberSaveable { mutableStateOf("") }
 
     if (recordAudioPermissionState.status.isGranted) {
-        Column(
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            val recordButtonText = if (isRecording) "Stop recording" else "Record"
-            Button({ isRecording = !isRecording }) {
-                Text(recordButtonText)
+        val recordButtonText = if (isRecording) "Stop recording" else "Record"
+        peakText = when (measurementPeakRmsStatus) {
+            is MeasurementPeakRmsStatus.NotRecording -> "Not recording"
+            is MeasurementPeakRmsStatus.Error -> "Error, try again."
+            is MeasurementPeakRmsStatus.Success -> {
+                val peak = (measurementPeakRmsStatus as MeasurementPeakRmsStatus.Success).peak
+                peak.toString()
             }
-            waveformText = when (waveformStatus) {
-                is WaveformStatus.NotRecording -> "Not recording"
-                is WaveformStatus.Error -> "Error, please try again."
-                is WaveformStatus.Success -> (waveformStatus as WaveformStatus.Success).waveformTextValue
-            }
-            Text(waveformText)
-            Spacer(Modifier.size(128.dp))
-            Button({ isFinished = true }) {
-                Text("Finish")
+        }
+        rmsText = when (measurementPeakRmsStatus) {
+            is MeasurementPeakRmsStatus.NotRecording -> "Not recording"
+            is MeasurementPeakRmsStatus.Error -> "Error, try again."
+            is MeasurementPeakRmsStatus.Success -> {
+                val rms = (measurementPeakRmsStatus as MeasurementPeakRmsStatus.Success).rms
+                rms.toString()
             }
         }
 
         // May want to use later
 //        val mediaPlayer = MediaPlayer(LocalContext.current)
-        val visualizer = Visualizer(0)
-        waveformStatus = if (isRecording) {
+        if (isRecording) {
             visualizer.enabled = true
-            val bytes = ByteArray(visualizer.captureSize)
-            if (visualizer.getWaveForm(bytes) == 0) {
-                WaveformStatus.Success(bytes[0].toString())
+            val measurementPeakRms = Visualizer.MeasurementPeakRms()
+            visualizer.measurementMode = Visualizer.MEASUREMENT_MODE_PEAK_RMS
+
+            val getMeasurementPeakRmsResult = visualizer.getMeasurementPeakRms(measurementPeakRms)
+            measurementPeakRmsStatus = if (getMeasurementPeakRmsResult == Visualizer.SUCCESS) {
+                val peak = measurementPeakRms.mPeak
+                val rms = measurementPeakRms.mRms
+                if (rms < -7000) {
+                    val audioManager = LocalContext.current.getSystemService(Context.AUDIO_SERVICE)
+                    if (audioManager is AudioManager) {
+                        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+                    }
+                }
+                MeasurementPeakRmsStatus.Success(peak, rms)
             } else {
-                WaveformStatus.Error
+                MeasurementPeakRmsStatus.Error
             }
         } else {
             visualizer.enabled = false
-            WaveformStatus.NotRecording
+            measurementPeakRmsStatus = MeasurementPeakRmsStatus.NotRecording
         }
 
-        if (isFinished) {
-            visualizer.release()
+        Column(
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Button({ isRecording = !isRecording }) {
+                Text(recordButtonText)
+            }
+            Row {
+                Text("The peak is:")
+                Text(peakText)
+            }
+            Row {
+                Text("The rms is:")
+                Text(rmsText)
+            }
         }
-
-        // Reference for later
-//        val audioManager = LocalContext.current.getSystemService(Context.AUDIO_SERVICE)
-//        if (audioManager is AudioManager) {
-//            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-//        }
     } else {
         Column(
             verticalArrangement = Arrangement.Center,
@@ -128,22 +151,13 @@ private fun FeatureThatRequiresRecordAudioPermission() {
                 // If it's the first time the user lands on this feature, or the user
                 // doesn't want to be asked again for this permission, explain that the
                 // permission is required
-                "Record audio permission required for this feature to be available. " +
-                        "Please grant the permission"
+                "Record audio permission is required for this feature to be available. " +
+                        "Please grant permission"
             }
             Text(textToShow)
             Button(onClick = { recordAudioPermissionState.launchPermissionRequest() }) {
                 Text("Request permission")
             }
         }
-    }
-}
-
-@RequiresApi(34)
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    AudioNormalizerTheme {
-        FeatureThatRequiresRecordAudioPermission()
     }
 }
