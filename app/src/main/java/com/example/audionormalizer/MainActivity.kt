@@ -29,8 +29,6 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 
-const val MIN_RMS = -8000
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,13 +55,6 @@ private fun FeatureThatRequiresRecordAudioPermission() {
         var isRecording by rememberSaveable { mutableStateOf(false) }
         var isError by rememberSaveable { mutableStateOf(false) }
         var canErrorDialogOpen by rememberSaveable { mutableStateOf(true) }
-
-        val intent = Intent(LocalContext.current, AudioNormalizerService::class.java)
-        if (isRecording && !isError) {
-            startForegroundService(LocalContext.current, intent)
-        } else {
-            LocalContext.current.stopService(intent)
-        }
 
         if (isError && canErrorDialogOpen) {
             AlertDialog(
