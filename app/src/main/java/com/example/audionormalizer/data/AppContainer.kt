@@ -3,9 +3,9 @@ package com.example.audionormalizer.data
 import android.content.Context
 
 interface AppContainer {
-    val audioNormalizerRepository: AudioNormalizerRepository
+    val normalizerRepository: NormalizerRepository
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
-    override val audioNormalizerRepository = WorkManagerNormalizerRepository(context)
+    override val normalizerRepository = WorkManagerNormalizerRepository(context)
 }

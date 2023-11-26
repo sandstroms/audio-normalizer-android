@@ -1,18 +1,19 @@
 package com.example.audionormalizer.data
 
 import android.content.Context
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequest
+import androidx.lifecycle.asFlow
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.audionormalizer.AUDIO_NORMALIZER_WORK_NAME
 import com.example.audionormalizer.TAG_OUTPUT
+import com.example.audionormalizer.workers.NormalizerWorker
 import kotlinx.coroutines.flow.Flow
-import java.time.Duration
+import kotlinx.coroutines.flow.mapNotNull
+import java.util.concurrent.TimeUnit
 
-class WorkManagerNormalizerRepository(context: Context) : AudioNormalizerRepository {
+class WorkManagerNormalizerRepository(context: Context) : NormalizerRepository {
 
     private val workManager = WorkManager.getInstance(context)
 
@@ -21,23 +22,16 @@ class WorkManagerNormalizerRepository(context: Context) : AudioNormalizerReposit
             if (it.isNotEmpty()) it.first() else null
         }
 
-    override fun normalizeAudio(currentRms: Int) {
-        val continuation = workManager
-            .beginUniqueWork(
-                "normalize_audio_work",
-                ExistingWorkPolicy.REPLACE,
-                OneTimeWorkRequest.Companion.from(AudioNormalizerWorker::class.java)
-            )
+    override fun normalizeAudio() {
+        val normalizerWorkRequest =
+            PeriodicWorkRequestBuilder<NormalizerWorker>(10000, TimeUnit.MILLISECONDS)
+                .build()
 
-        val constraints = Constraints.Builder()
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val normalizerBuilder = PeriodicWorkRequestBuilder<AudioNormalizerWorker>(Duration.ofMillis(500))
-
-        normalizerBuilder.setConstraints(constraints)
-
-        continuation.enqueue()
+        workManager.enqueueUniquePeriodicWork(
+            AUDIO_NORMALIZER_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            normalizerWorkRequest
+        )
     }
 
     override fun cancelWork() {

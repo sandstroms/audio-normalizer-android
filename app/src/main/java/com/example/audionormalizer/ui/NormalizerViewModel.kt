@@ -8,14 +8,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.work.WorkInfo
 import com.example.audionormalizer.AudioNormalizerApplication
-import com.example.audionormalizer.data.AudioNormalizerRepository
+import com.example.audionormalizer.data.NormalizerRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-class NormalizerViewModel(private val audioNormalizerRepository: AudioNormalizerRepository) : ViewModel() {
-    val normalizerUiState: StateFlow<NormalizerUiState> = audioNormalizerRepository.outputWorkInfo
+class NormalizerViewModel(private val normalizerRepository: NormalizerRepository) : ViewModel() {
+    val normalizerUiState: StateFlow<NormalizerUiState> = normalizerRepository.outputWorkInfo
         .map { info ->
             when {
                 info.state.isFinished -> {
@@ -24,7 +24,7 @@ class NormalizerViewModel(private val audioNormalizerRepository: AudioNormalizer
                 info.state == WorkInfo.State.CANCELLED -> {
                     NormalizerUiState.Default
                 }
-                else -> NormalizerUiState.Loading
+                else -> NormalizerUiState.Recording
             }
         }.stateIn(
             scope = viewModelScope,
@@ -33,20 +33,20 @@ class NormalizerViewModel(private val audioNormalizerRepository: AudioNormalizer
         )
 
     fun normalizeAudio() {
-        audioNormalizerRepository.normalizeAudio()
+        normalizerRepository.normalizeAudio()
     }
 
     fun cancelWork() {
-        audioNormalizerRepository.cancelWork()
+        normalizerRepository.cancelWork()
     }
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val audioNormalizerRepository =
-                    (this[APPLICATION_KEY] as AudioNormalizerApplication).container.audioNormalizerRepository
+                    (this[APPLICATION_KEY] as AudioNormalizerApplication).container.normalizerRepository
                 NormalizerViewModel(
-                    audioNormalizerRepository = audioNormalizerRepository
+                    normalizerRepository = audioNormalizerRepository
                 )
             }
         }
@@ -54,7 +54,7 @@ class NormalizerViewModel(private val audioNormalizerRepository: AudioNormalizer
 }
 
 sealed interface NormalizerUiState {
-    object Default : NormalizerUiState
-    object Loading : NormalizerUiState
-    object Complete : NormalizerUiState
+    data object Default : NormalizerUiState
+    data object Recording : NormalizerUiState
+    data object Complete : NormalizerUiState
 }
