@@ -3,6 +3,8 @@ package com.example.audionormalizer.data
 import android.content.Context
 import androidx.lifecycle.asFlow
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -24,12 +26,12 @@ class WorkManagerNormalizerRepository(context: Context) : NormalizerRepository {
 
     override fun normalizeAudio() {
         val normalizerWorkRequest =
-            PeriodicWorkRequestBuilder<NormalizerWorker>(10000, TimeUnit.MILLISECONDS)
+            PeriodicWorkRequestBuilder<NormalizerWorker>(15, TimeUnit.MINUTES)
                 .build()
 
         workManager.enqueueUniquePeriodicWork(
             AUDIO_NORMALIZER_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             normalizerWorkRequest
         )
     }

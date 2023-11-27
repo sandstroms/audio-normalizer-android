@@ -1,6 +1,8 @@
 package com.example.audionormalizer.ui
 
 import android.Manifest
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,15 +20,17 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun FeatureThatRequiresRecordAudioPermission(
     normalizerViewModel: NormalizerViewModel = viewModel(factory = NormalizerViewModel.Factory)
 ) {
     val recordAudioPermissionState = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+    val postNotificationsPermissionState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     val uiState by normalizerViewModel.normalizerUiState.collectAsStateWithLifecycle()
 
-    if (recordAudioPermissionState.status.isGranted) {
+    if (recordAudioPermissionState.status.isGranted && postNotificationsPermissionState.status.isGranted) {
         when (uiState) {
             is NormalizerUiState.Default -> {
                 Button(
@@ -78,6 +82,9 @@ fun FeatureThatRequiresRecordAudioPermission(
             Text(textToShow)
             Button(onClick = { recordAudioPermissionState.launchPermissionRequest() }) {
                 Text("Request permission")
+            }
+            Button(onClick = { postNotificationsPermissionState.launchPermissionRequest() }) {
+                Text("Delete this, post notification permission")
             }
         }
     }
