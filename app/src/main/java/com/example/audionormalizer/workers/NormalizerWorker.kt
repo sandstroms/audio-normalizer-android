@@ -38,18 +38,44 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             visualizer.enabled = true
             val measurementPeakRms = Visualizer.MeasurementPeakRms()
             visualizer.measurementMode = Visualizer.MEASUREMENT_MODE_PEAK_RMS
+            var currentRms: Int
+            var totalRms = 0
+            var numMeasurements = 0
+            var averageRms: Double
 
-            repeat(30) {
+            repeat(1800) { times ->
                 visualizer.getMeasurementPeakRms(measurementPeakRms)
-                val previousRms = measurementPeakRms.mRms
+                currentRms = measurementPeakRms.mRms
+                totalRms += currentRms
+                numMeasurements++
+                averageRms = totalRms.toDouble() / numMeasurements
+                val noiseFactor = -(400 * (-9600 / averageRms) + 500)
 
-                delay(1000)
+                if (times % 5 == 0) {
+                    WorkManager.getInstance(applicationContext).createCancelPendingIntent(id)
 
-                visualizer.getMeasurementPeakRms(measurementPeakRms)
-                val currentRms = measurementPeakRms.mRms
+                    val name = VERBOSE_NOTIFICATION_CHANNEL_NAME
+                    val description = VERBOSE_NOTIFICATION_CHANNEL_DESCRIPTION
+                    val importance = NotificationManager.IMPORTANCE_HIGH
+                    val channel = NotificationChannel(CHANNEL_ID, name, importance)
+                    channel.description = description
 
-                if ((currentRms < previousRms + 1000 && currentRms > -9600) || currentRms > previousRms - 1000) {
-                    if (currentRms < previousRms + 1000) {
+                    notificationManager.createNotificationChannel(channel)
+
+                    val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+                        .setContentTitle(NOTIFICATION_TITLE)
+                        .setTicker(NOTIFICATION_TITLE)
+                        .setContentText("Average RMS: $averageRms, Noise factor: $noiseFactor")
+                        .setSmallIcon(R.drawable.ic_launcher_foreground)
+                        .setOngoing(true)
+                        .build()
+
+                    setForeground(ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK))
+
+                }
+
+                if ((currentRms < averageRms + noiseFactor && currentRms > -9600) || currentRms > averageRms - noiseFactor) {
+                    if (currentRms < averageRms + noiseFactor) {
                         if (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) <
                             audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                         ) {
@@ -71,6 +97,8 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         }
                     }
                 }
+
+                delay(500)
             }
             visualizer.enabled = false
             Result.success()
