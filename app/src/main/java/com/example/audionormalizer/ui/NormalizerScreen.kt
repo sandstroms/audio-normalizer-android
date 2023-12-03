@@ -38,7 +38,7 @@ fun FeatureThatRequiresRecordAudioPermission(
                     Text("Record")
                 }
             }
-            is NormalizerUiState.Recording -> {
+            is NormalizerUiState.Normalizing -> {
                 Button(
                     onClick = normalizerViewModel::cancelWork,
                     modifier = Modifier
@@ -46,16 +46,6 @@ fun FeatureThatRequiresRecordAudioPermission(
                         .wrapContentSize(Alignment.Center)
                 ) {
                     Text("Stop recording")
-                }
-            }
-            is NormalizerUiState.Complete -> {
-                Button(
-                    onClick = { },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .wrapContentSize(Alignment.Center)
-                ) {
-                    Text("Recording finished")
                 }
             }
         }

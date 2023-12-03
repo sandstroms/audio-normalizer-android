@@ -9,6 +9,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.audionormalizer.CHANNEL_ID
 import com.example.audionormalizer.NOTIFICATION_ID
@@ -19,7 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
-    private val audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override suspend fun doWork(): Result {
@@ -33,6 +34,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         var averageRms: Double
 
         setForeground(createForegroundInfo())
+
         return withContext(Dispatchers.IO) {
             repeat(1800) {
                 visualizer.getMeasurementPeakRms(measurementPeakRms)
@@ -77,11 +79,16 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun createForegroundInfo(): ForegroundInfo {
+        val cancel = "Cancel Normalizing"
+        val intent = WorkManager.getInstance(applicationContext)
+            .createCancelPendingIntent(id)
+
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(NOTIFICATION_TITLE)
             .setTicker(NOTIFICATION_TITLE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_delete, cancel, intent)
             .build()
 
         return ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)

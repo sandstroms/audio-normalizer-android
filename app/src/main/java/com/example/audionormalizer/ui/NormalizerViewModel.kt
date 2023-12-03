@@ -17,14 +17,10 @@ import kotlinx.coroutines.flow.stateIn
 class NormalizerViewModel(private val normalizerRepository: NormalizerRepository) : ViewModel() {
     val normalizerUiState: StateFlow<NormalizerUiState> = normalizerRepository.outputWorkInfo
         .map { info ->
-            when {
-                info.state.isFinished -> {
-                    NormalizerUiState.Complete
-                }
-                info.state == WorkInfo.State.CANCELLED -> {
-                    NormalizerUiState.Default
-                }
-                else -> NormalizerUiState.Recording
+            if (info.state == WorkInfo.State.CANCELLED) {
+                NormalizerUiState.Default
+            } else {
+                NormalizerUiState.Normalizing
             }
         }.stateIn(
             scope = viewModelScope,
@@ -55,6 +51,5 @@ class NormalizerViewModel(private val normalizerRepository: NormalizerRepository
 
 sealed interface NormalizerUiState {
     data object Default : NormalizerUiState
-    data object Recording : NormalizerUiState
-    data object Complete : NormalizerUiState
+    data object Normalizing : NormalizerUiState
 }
