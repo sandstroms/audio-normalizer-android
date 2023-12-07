@@ -1,5 +1,7 @@
 package com.example.audionormalizer.workers
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
@@ -15,11 +17,15 @@ import com.example.audionormalizer.CHANNEL_ID
 import com.example.audionormalizer.NOTIFICATION_ID
 import com.example.audionormalizer.NOTIFICATION_TITLE
 import com.example.audionormalizer.R
+import com.example.audionormalizer.VERBOSE_NOTIFICATION_CHANNEL_DESCRIPTION
+import com.example.audionormalizer.VERBOSE_NOTIFICATION_CHANNEL_NAME
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    private val notificationManager =
+        ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -42,7 +48,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                 totalRms += currentRms
                 numMeasurements++
                 averageRms = totalRms.toDouble() / numMeasurements
-                val noiseFactor = -(400 * (-9600 / averageRms) + 500)
+                val noiseFactor = -(1000 * (-9600 / averageRms) + 500)
 
                 if ((currentRms < averageRms + noiseFactor && currentRms > -9600) || currentRms > averageRms - noiseFactor) {
                     if (currentRms < averageRms + noiseFactor) {
@@ -77,11 +83,12 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     private fun createForegroundInfo(): ForegroundInfo {
         val cancel = "Cancel Normalizing"
         val intent = WorkManager.getInstance(applicationContext)
             .createCancelPendingIntent(id)
+
+        createChannel()
 
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(NOTIFICATION_TITLE)
@@ -91,6 +98,18 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             .addAction(android.R.drawable.ic_delete, cancel, intent)
             .build()
 
-        return ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        else
+            ForegroundInfo(NOTIFICATION_ID, builder)
+    }
+
+    private fun createChannel() {
+        val name = VERBOSE_NOTIFICATION_CHANNEL_NAME
+        val descriptionText = VERBOSE_NOTIFICATION_CHANNEL_DESCRIPTION
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val mChannel = NotificationChannel(CHANNEL_ID, name, importance)
+        mChannel.description = descriptionText
+        notificationManager.createNotificationChannel(mChannel)
     }
 }
