@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -11,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -52,7 +54,8 @@ fun FeatureThatRequiresRecordAudioPermission(
     } else {
         Column(
             verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
         ){
             val textToShow = if (recordAudioPermissionState.status.shouldShowRationale) {
                 // If the user has denied the permission but the rationale can be shown,
@@ -65,7 +68,10 @@ fun FeatureThatRequiresRecordAudioPermission(
                 "Record audio permission is required for this feature to be available. " +
                         "Please grant permission"
             }
-            Text(textToShow)
+            Text(
+                text = textToShow,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
             Button(onClick = { recordAudioPermissionState.launchPermissionRequest() }) {
                 Text("Request permission")
             }
