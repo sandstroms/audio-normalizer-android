@@ -29,20 +29,19 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    private var currentMusicVolume: Int? = null
     private var currentRms: Int? = null
     private var averageRms: Double? = null
     private var noiseFactor: Double? = null
-    private var totalRms: Int = 0
-    private var numMeasurements: Int = 0
-    private var currentMusicVolume: Int? = null
+    private var totalRms = 0
+    private var numMeasurements = 0
 
     init {
         val audioPlaybackCallback = object : AudioManager.AudioPlaybackCallback() {
             override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                 super.onPlaybackConfigChanged(configs)
                 val newMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                /* If the current music volume is not equal to the new music volume, the user adjusted
-                * the audio and we should reset the values */
+                // Reset the values since the user adjusted the volume
                 if (currentMusicVolume != null && currentMusicVolume != newMusicVolume) {
                     currentRms = null
                     averageRms = null
@@ -62,9 +61,6 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         val measurementPeakRms = Visualizer.MeasurementPeakRms()
         visualizer.measurementMode = Visualizer.MEASUREMENT_MODE_PEAK_RMS
 
-        totalRms = 0
-        numMeasurements = 0
-
         setForeground(createForegroundInfo())
 
         return withContext(Dispatchers.IO) {
@@ -77,11 +73,9 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                 noiseFactor = -(1000 * (-9600 / (averageRms ?: 0.0)) + 500)
                 currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-               // Raise the volume if the current rms is below a certain threshold, not completely quiet, and not at max volume
-               if (((currentRms ?: 0) < (averageRms ?: 0.0) + (noiseFactor ?: 0.0) && (currentRms
-                       ?: Int.MIN_VALUE) > -9600) &&
-                   (currentMusicVolume
-                       ?: 0) < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+               // Raise the volume if the current rms is below a certain threshold
+               if (((currentRms ?: 0) < (averageRms ?: 0.0) + (noiseFactor ?: 0.0) && (currentRms ?: 0) > -9600) &&
+                   (currentMusicVolume ?: 0) < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                ) {
                     audioManager.adjustStreamVolume(
                         AudioManager.STREAM_MUSIC,
@@ -90,10 +84,9 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                     )
                    // Get the current music volume since it was adjusted
                    currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-               // Lower the volume if the current rms is above a certain threshold and not at the minimum volume
+               // Lower the volume if the current rms is above a certain threshold
                } else if (((currentRms ?: 0) > (averageRms ?: 0.0) - (noiseFactor ?: 0.0)) &&
-                   (currentMusicVolume
-                       ?: 0) > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
+                   (currentMusicVolume ?: 0) > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
                ) {
                    audioManager.adjustStreamVolume(
                        AudioManager.STREAM_MUSIC,
@@ -123,6 +116,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(NOTIFICATION_TITLE)
             .setTicker(NOTIFICATION_TITLE)
+            .setContentText("Average RMS: $averageRms Noise factor: $noiseFactor")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, cancel, intent)
