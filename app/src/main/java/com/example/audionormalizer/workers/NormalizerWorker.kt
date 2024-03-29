@@ -3,12 +3,11 @@ package com.example.audionormalizer.workers
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Context.NOTIFICATION_SERVICE
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.audiofx.Visualizer
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -23,11 +22,12 @@ import com.example.audionormalizer.VERBOSE_NOTIFICATION_CHANNEL_NAME
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 
 class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
-    private val notificationManager =
-        ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val notificationManager = ctx.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+    private val visualizer: Visualizer
 
     private var currentMusicVolume: Int? = null
     private var currentRms: Int? = null
@@ -52,19 +52,30 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             }
         }
         audioManager.registerAudioPlaybackCallback(audioPlaybackCallback, null)
+
+        visualizer = Visualizer(0)
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
+    // See https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running#long-running-kotlin
     override suspend fun doWork(): Result {
-        val visualizer = Visualizer(0)
+        return try {
+            setForeground(createForegroundInfo(averageRms ?: 0.0, noiseFactor ?: 0.0))
+            normalizeAudio()
+            Result.success()
+        } catch (e: CancellationException) {
+            visualizer.enabled = false
+            visualizer.release()
+            Result.failure()
+        }
+    }
+
+    private suspend fun normalizeAudio() {
         visualizer.enabled = true
         val measurementPeakRms = Visualizer.MeasurementPeakRms()
         visualizer.measurementMode = Visualizer.MEASUREMENT_MODE_PEAK_RMS
 
-        setForeground(createForegroundInfo())
-
         return withContext(Dispatchers.IO) {
-            repeat(3600) {
+            while(true) {
                 visualizer.getMeasurementPeakRms(measurementPeakRms)
                 currentRms = measurementPeakRms.mRms
                 totalRms += currentRms ?: 0
@@ -73,40 +84,39 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                 noiseFactor = -(1000 * (-9600 / (averageRms ?: 0.0)) + 500)
                 currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-               // Raise the volume if the current rms is below a certain threshold
-               if (((currentRms ?: 0) < (averageRms ?: 0.0) + (noiseFactor ?: 0.0) && (currentRms ?: 0) > -9600) &&
-                   (currentMusicVolume ?: 0) < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-               ) {
+                // Raise the volume if the current rms is below a certain threshold
+                if (((currentRms ?: 0) < (averageRms ?: 0.0) + (noiseFactor ?: 0.0) && (currentRms
+                        ?: 0) > -9600) &&
+                    (currentMusicVolume
+                        ?: 0) < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                ) {
                     audioManager.adjustStreamVolume(
                         AudioManager.STREAM_MUSIC,
                         AudioManager.ADJUST_RAISE,
                         AudioManager.FLAG_SHOW_UI
                     )
-                   // Get the current music volume since it was adjusted
-                   currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-               // Lower the volume if the current rms is above a certain threshold
-               } else if (((currentRms ?: 0) > (averageRms ?: 0.0) - (noiseFactor ?: 0.0)) &&
-                   (currentMusicVolume ?: 0) > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
-               ) {
-                   audioManager.adjustStreamVolume(
-                       AudioManager.STREAM_MUSIC,
-                       AudioManager.ADJUST_LOWER,
-                       AudioManager.FLAG_SHOW_UI
-                   )
-                   // Set the current music volume since it was adjusted
-                   currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-               }
+                    // Get the current music volume since it was adjusted
+                    currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    // Lower the volume if the current rms is above a certain threshold
+                } else if (((currentRms ?: 0) > (averageRms ?: 0.0) - (noiseFactor ?: 0.0)) &&
+                    (currentMusicVolume
+                        ?: 0) > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
+                ) {
+                    audioManager.adjustStreamVolume(
+                        AudioManager.STREAM_MUSIC,
+                        AudioManager.ADJUST_LOWER,
+                        AudioManager.FLAG_SHOW_UI
+                    )
+                    // Set the current music volume since it was adjusted
+                    currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                }
 
                 delay(250)
             }
-            visualizer.enabled = false
-            visualizer.release()
-
-            Result.success()
         }
     }
 
-    private fun createForegroundInfo(): ForegroundInfo {
+    private fun createForegroundInfo(avgRms: Double, noiseF: Double): ForegroundInfo {
         val cancel = "Cancel Normalizing"
         val intent = WorkManager.getInstance(applicationContext)
             .createCancelPendingIntent(id)
@@ -116,16 +126,13 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(NOTIFICATION_TITLE)
             .setTicker(NOTIFICATION_TITLE)
-            .setContentText("Average RMS: $averageRms Noise factor: $noiseFactor")
+            .setContentText("Average RMS: $avgRms Noise factor: $noiseF")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, cancel, intent)
             .build()
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-            ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        else
-            ForegroundInfo(NOTIFICATION_ID, builder)
+        return ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
     }
 
     private fun createChannel() {
