@@ -8,8 +8,10 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.example.audionormalizer.AUDIO_NORMALIZER_WORK_NAME
 import com.example.audionormalizer.TAG_OUTPUT
+import com.example.audionormalizer.ui.AudioLevel
 import com.example.audionormalizer.workers.NormalizerWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
@@ -24,10 +26,11 @@ class WorkManagerNormalizerRepository(context: Context) : NormalizerRepository {
             if (it.isNotEmpty()) it.first() else null
         }
 
-    override fun normalizeAudio() {
+    override fun normalizeAudio(audioLevel: String) {
         val normalizerWorkRequest =
             OneTimeWorkRequestBuilder<NormalizerWorker>()
                 .addTag(TAG_OUTPUT)
+                .setInputData(workDataOf("AUDIO_LEVEL" to audioLevel))
                 .build()
 
         workManager.enqueueUniqueWork(
