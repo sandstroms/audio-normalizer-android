@@ -1,9 +1,9 @@
 package com.example.audionormalizer
 
 val VERBOSE_NOTIFICATION_CHANNEL_NAME: CharSequence =
-    "Verbose WorkManager Notifications"
+    "Show that the audio normalizer is in use"
 const val VERBOSE_NOTIFICATION_CHANNEL_DESCRIPTION =
-    "Shows notifications whenever work starts"
+    "Shows notifications whenever work on audio normalizing starts"
 val NOTIFICATION_TITLE: CharSequence = "Normalizing Audio"
 const val CHANNEL_ID = "VERBOSE_NOTIFICATION"
 const val NOTIFICATION_ID = 1

@@ -1,7 +1,6 @@
 package com.example.audionormalizer.data
 
 import androidx.work.WorkInfo
-import com.example.audionormalizer.ui.AudioLevel
 import kotlinx.coroutines.flow.Flow
 
 interface NormalizerRepository {

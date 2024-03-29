@@ -12,7 +12,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
 import com.example.audionormalizer.CHANNEL_ID
 import com.example.audionormalizer.NOTIFICATION_ID
 import com.example.audionormalizer.NOTIFICATION_TITLE
@@ -40,19 +39,14 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     // See https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running#long-running-kotlin
     override suspend fun doWork(): Result {
         return try {
-            setForeground(createForegroundInfo())
             val audioLevelInput = inputData.getString("AUDIO_LEVEL") ?: return Result.failure()
+            setForeground(createForegroundInfo(audioLevelInput))
             normalizeAudio(audioLevelInput)
             Result.success()
         } catch (e: CancellationException) {
             visualizer.enabled = false
             visualizer.release()
             Result.failure()
-        } catch(e: Exception) {
-            // TODO: make sure the failure shows a snackbar
-            visualizer.enabled = false
-            visualizer.release()
-            Result.failure(workDataOf("ERROR" to "INVALID_AUDIO_LEVEL"))
         }
     }
 
@@ -107,7 +101,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             val upperRange: Double
             when (audioLevel) {
                 AudioLevel.LOW.textDescription -> {
-                    lowerRange = -8700.0
+                    lowerRange = -8200.0
                     upperRange = -6000.0
                 }
                 AudioLevel.MEDIUM.textDescription -> {
@@ -153,14 +147,12 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Set the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     }
-
-                    delay(250)
                 }
             }
         }
     }
 
-    private fun createForegroundInfo(): ForegroundInfo {
+    private fun createForegroundInfo(audioLevel: String): ForegroundInfo {
         val cancel = "Cancel Normalizing"
         val intent = WorkManager.getInstance(applicationContext)
             .createCancelPendingIntent(id)
@@ -170,7 +162,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle(NOTIFICATION_TITLE)
             .setTicker(NOTIFICATION_TITLE)
-            .setContentText("currentRms: $currentRms")
+            .setContentText("Audio normalizer level is set to ${audioLevel.lowercase()}")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, cancel, intent)
