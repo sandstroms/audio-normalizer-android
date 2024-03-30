@@ -1,5 +1,8 @@
 package com.example.audionormalizer.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -26,6 +29,13 @@ class NormalizerViewModel(private val normalizerRepository: NormalizerRepository
             started = SharingStarted.WhileSubscribed(5_0000),
             initialValue = NormalizerUiState.Default
         )
+
+    var selectedOption by mutableStateOf(AudioLevel.MEDIUM)
+        private set
+
+    fun updateSelectedOption(updatedOption: AudioLevel) {
+        selectedOption = updatedOption
+    }
 
     fun normalizeAudio(audioLevel: AudioLevel) {
         normalizerRepository.normalizeAudio(audioLevel.textDescription)
@@ -54,5 +64,5 @@ sealed interface NormalizerUiState {
 }
 
 enum class AudioLevel(val textDescription: String) {
-    LOW("Low"), MEDIUM("Medium"), HIGH("High"), DYNAMIC("Dynamic")
+    VERY_QUIET("Very quiet"), QUIET("Quiet"), MEDIUM("Medium"), LOUD("Loud"), DYNAMIC("Dynamic")
 }

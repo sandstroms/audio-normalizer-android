@@ -3,15 +3,21 @@ package com.example.audionormalizer.ui
 import android.Manifest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,34 +35,53 @@ fun FeatureThatRequiresRecordAudioPermission(
     val uiState by normalizerViewModel.normalizerUiState.collectAsStateWithLifecycle()
 
     if (recordAudioPermissionState.status.isGranted) {
+        val options = AudioLevel.entries.toTypedArray()
+
         when (uiState) {
-            NormalizerUiState.Default -> {
-                Column(modifier = Modifier
-                    .fillMaxSize()
-                    .wrapContentSize(Alignment.Center)
+            is NormalizerUiState.Default -> {
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
                 ) {
-                    Button(onClick = { normalizerViewModel.normalizeAudio(AudioLevel.LOW) }) {
-                        Text("Low")
+                    Column {
+                        Text("Select an audio level and then press \"Start\"")
                     }
-                    Button(onClick = { normalizerViewModel.normalizeAudio(AudioLevel.MEDIUM) }) {
-                        Text("Medium")
-                    }
-                    Button(onClick = { normalizerViewModel.normalizeAudio(AudioLevel.HIGH) }) {
-                        Text("High")
+                    Column(Modifier.selectableGroup()) {
+                        options.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .selectable(
+                                        selected = (option == normalizerViewModel.selectedOption),
+                                        onClick = { normalizerViewModel.updateSelectedOption(option) },
+                                        role = Role.RadioButton
+                                    )
+                            ) {
+                                RadioButton(
+                                    selected = (option == normalizerViewModel.selectedOption),
+                                    onClick = null // null recommended for accessibility with screenreaders
+                                )
+                                Text(
+                                    text = option.textDescription,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(start = 16.dp)
+                                )
+                            }
+                        }
                     }
                     Button(
-                        onClick = { normalizerViewModel.normalizeAudio(AudioLevel.DYNAMIC) }
+                        onClick = { normalizerViewModel.normalizeAudio(normalizerViewModel.selectedOption) }
                     ) {
-                        Text("Dynamic")
+                        Text("Start")
                     }
                 }
             }
-            NormalizerUiState.Normalizing -> {
+            is NormalizerUiState.Normalizing -> {
                 Button(
-                    onClick = normalizerViewModel::cancelWork,
                     modifier = Modifier
                         .fillMaxSize()
-                        .wrapContentSize(Alignment.Center)
+                        .wrapContentSize(Alignment.Center),
+                    onClick = normalizerViewModel::cancelWork
                 ) {
                     Text("Stop normalizing")
                 }
@@ -67,7 +92,7 @@ fun FeatureThatRequiresRecordAudioPermission(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(32.dp)
-        ){
+        ) {
             val textToShow = if (recordAudioPermissionState.status.shouldShowRationale) {
                 // If the user has denied the permission but the rationale can be shown,
                 // then gently explain why the app requires this permission

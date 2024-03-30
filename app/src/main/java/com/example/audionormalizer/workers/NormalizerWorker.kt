@@ -100,16 +100,20 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             val lowerRange: Double
             val upperRange: Double
             when (audioLevel) {
-                AudioLevel.LOW.textDescription -> {
+                AudioLevel.VERY_QUIET.textDescription -> {
+                    lowerRange = -9400.0
+                    upperRange = -8200.0
+                }
+                AudioLevel.QUIET.textDescription -> {
                     lowerRange = -8200.0
-                    upperRange = -6000.0
+                    upperRange = -6600.0
                 }
                 AudioLevel.MEDIUM.textDescription -> {
-                    lowerRange = -6000.0
-                    upperRange = -3000.0
+                    lowerRange = -6600.0
+                    upperRange = -3600.0
                 }
-                AudioLevel.HIGH.textDescription -> {
-                    lowerRange = -3000.0
+                AudioLevel.LOUD.textDescription -> {
+                    lowerRange = -3600.0
                     upperRange = -1000.0
                 }
                 else -> {
