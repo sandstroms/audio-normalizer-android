@@ -70,8 +70,6 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                     noiseFactor = -(1000 * (-9600 / averageRms + 500))
                     currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-                    if (currentRms == -9600) isNewSong = true
-
                     // Raise the volume if the current rms is below a certain threshold
                     if (currentRms < averageRms + noiseFactor && currentRms > -9600 &&
                         currentMusicVolume < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -131,7 +129,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
 
                     currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-                    if (currentRms == -9600) isNewSong = true
+                    isNewSong = currentRms == -9600
 
                     // Raise the volume if the current rms is below a certain threshold
                     if (((isNewSong && (currentRms < lowerRange)) || (!isNewSong && (currentRms < lowerRange - 1000))) && currentRms > -9600 &&
