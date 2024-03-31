@@ -7,7 +7,6 @@ import android.content.Context.NOTIFICATION_SERVICE
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.media.audiofx.Visualizer
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -30,13 +29,6 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     private val notificationManager = ctx.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
     private var visualizer: Visualizer? = null
 
-    private var currentMusicVolume: Int? = null
-    private var currentRms: Int? = null
-    private var averageRms: Double? = null
-    private var noiseFactor: Double? = null
-    private var totalRms = 0
-    private var numMeasurements = 0
-
     // See https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running#long-running-kotlin
     override suspend fun doWork(): Result {
         return try {
@@ -55,6 +47,13 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     private suspend fun normalizeAudio(audioSessionId: Int, audioLevel: String) {
+        var currentMusicVolume: Int
+        var currentRms: Int
+        var averageRms: Double
+        var noiseFactor: Double
+        var totalRms = 0
+        var numMeasurements = 0
+        var isNewSong = false
         visualizer = Visualizer(audioSessionId)
         visualizer?.enabled = true
         val measurementPeakRms = Visualizer.MeasurementPeakRms()
@@ -65,17 +64,17 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                 while(true) {
                     visualizer?.getMeasurementPeakRms(measurementPeakRms)
                     currentRms = measurementPeakRms.mRms
-                    totalRms += currentRms ?: 0
+                    totalRms += currentRms
                     numMeasurements++
                     averageRms = totalRms.toDouble() / numMeasurements
-                    noiseFactor = -(1000 * (-9600 / (averageRms ?: 0.0)) + 500)
+                    noiseFactor = -(1000 * (-9600 / averageRms + 500))
                     currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
+                    if (currentRms == -9600) isNewSong = true
+
                     // Raise the volume if the current rms is below a certain threshold
-                    if (((currentRms ?: 0) < (averageRms ?: 0.0) + (noiseFactor ?: 0.0) && (currentRms
-                            ?: 0) > -9600) &&
-                        (currentMusicVolume
-                            ?: 0) < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    if (currentRms < averageRms + noiseFactor && currentRms > -9600 &&
+                        currentMusicVolume < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                     ) {
                         audioManager.adjustStreamVolume(
                             AudioManager.STREAM_MUSIC,
@@ -85,9 +84,8 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Get the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     // Lower the volume if the current rms is above a certain threshold
-                    } else if (((currentRms ?: 0) > (averageRms ?: 0.0) - (noiseFactor ?: 0.0)) &&
-                        (currentMusicVolume
-                            ?: 0) > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
+                    } else if ((currentRms > averageRms - noiseFactor) &&
+                        currentMusicVolume > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
                     ) {
                         audioManager.adjustStreamVolume(
                             AudioManager.STREAM_MUSIC,
@@ -133,9 +131,11 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
 
                     currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
+                    if (currentRms == -9600) isNewSong = true
+
                     // Raise the volume if the current rms is below a certain threshold
-                    if (((currentRms ?: 0) < lowerRange && (currentRms ?: 0) > -9600) &&
-                        (currentMusicVolume ?: 0) < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    if (((isNewSong && (currentRms < lowerRange)) || (!isNewSong && (currentRms < lowerRange - 1000))) && currentRms > -9600 &&
+                        currentMusicVolume < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                     ) {
                         audioManager.adjustStreamVolume(
                             AudioManager.STREAM_MUSIC,
@@ -145,8 +145,8 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Get the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     // Lower the volume if the current rms is above a certain threshold
-                    } else if (((currentRms ?: 0) > upperRange) &&
-                        (currentMusicVolume ?: 0) > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
+                    } else if (((isNewSong && (currentRms > upperRange)) || (!isNewSong && (currentRms > upperRange + 1000))) &&
+                        currentMusicVolume > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
                     ) {
                         audioManager.adjustStreamVolume(
                             AudioManager.STREAM_MUSIC,
@@ -156,8 +156,6 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Set the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     }
-
-                    delay(80)
                 }
             }
         }
