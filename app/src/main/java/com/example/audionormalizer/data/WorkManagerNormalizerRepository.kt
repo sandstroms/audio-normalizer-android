@@ -22,11 +22,11 @@ class WorkManagerNormalizerRepository(context: Context) : NormalizerRepository {
             if (it.isNotEmpty()) it.first() else null
         }
 
-    override fun normalizeAudio(audioLevel: String) {
+    override fun normalizeAudio(audioSessionId: Int, audioLevel: String) {
         val normalizerWorkRequest =
             OneTimeWorkRequestBuilder<NormalizerWorker>()
                 .addTag(TAG_OUTPUT)
-                .setInputData(workDataOf("AUDIO_LEVEL" to audioLevel))
+                .setInputData(workDataOf("SESSION_ID" to audioSessionId, "AUDIO_LEVEL" to audioLevel))
                 .build()
 
         workManager.enqueueUniqueWork(

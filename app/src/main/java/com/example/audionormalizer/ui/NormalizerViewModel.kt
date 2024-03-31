@@ -12,10 +12,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.work.WorkInfo
 import com.example.audionormalizer.AudioNormalizerApplication
 import com.example.audionormalizer.data.NormalizerRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 class NormalizerViewModel(private val normalizerRepository: NormalizerRepository) : ViewModel() {
     val normalizerUiState: StateFlow<NormalizerUiState> = normalizerRepository.outputWorkInfo
@@ -30,6 +33,9 @@ class NormalizerViewModel(private val normalizerRepository: NormalizerRepository
             initialValue = NormalizerUiState.Default
         )
 
+    private val _audioSessionState = MutableStateFlow(AudioSessionState())
+    val audioSessionState: StateFlow<AudioSessionState> = _audioSessionState.asStateFlow()
+
     var selectedOption by mutableStateOf(AudioLevel.MEDIUM)
         private set
 
@@ -37,8 +43,14 @@ class NormalizerViewModel(private val normalizerRepository: NormalizerRepository
         selectedOption = updatedOption
     }
 
-    fun normalizeAudio(audioLevel: AudioLevel) {
-        normalizerRepository.normalizeAudio(audioLevel.textDescription)
+    fun updateAudioSessionId(updatedSessionId: Int) {
+        _audioSessionState.update { currentState ->
+            currentState.copy(audioSessionId = updatedSessionId)
+        }
+    }
+
+    fun normalizeAudio(audioSessionId: Int, audioLevel: AudioLevel) {
+        normalizerRepository.normalizeAudio(audioSessionId, audioLevel.textDescription)
     }
 
     fun cancelWork() {
@@ -62,6 +74,8 @@ sealed interface NormalizerUiState {
     data object Default : NormalizerUiState
     data object Normalizing : NormalizerUiState
 }
+
+data class AudioSessionState(val audioSessionId: Int? = null)
 
 enum class AudioLevel(val textDescription: String) {
     VERY_QUIET("Very quiet"), QUIET("Quiet"), MEDIUM("Medium"), LOUD("Loud"), DYNAMIC("Dynamic")

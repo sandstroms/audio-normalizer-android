@@ -7,6 +7,7 @@ import android.content.Context.NOTIFICATION_SERVICE
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.media.audiofx.Visualizer
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -27,7 +28,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     private val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val notificationManager = ctx.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-    private val visualizer = Visualizer(0)
+    private var visualizer: Visualizer? = null
 
     private var currentMusicVolume: Int? = null
     private var currentRms: Int? = null
@@ -39,26 +40,30 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     // See https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running#long-running-kotlin
     override suspend fun doWork(): Result {
         return try {
+            val audioSessionId = inputData.getInt("SESSION_ID", -1)
+//            if (audioSessionId == -1) return Result.failure()
             val audioLevelInput = inputData.getString("AUDIO_LEVEL") ?: return Result.failure()
+
             setForeground(createForegroundInfo(audioLevelInput))
-            normalizeAudio(audioLevelInput)
+            normalizeAudio(audioSessionId, audioLevelInput)
             Result.success()
         } catch (e: CancellationException) {
-            visualizer.enabled = false
-            visualizer.release()
+            visualizer?.enabled = false
+            visualizer?.release()
             Result.failure()
         }
     }
 
-    private suspend fun normalizeAudio(audioLevel: String) {
-        visualizer.enabled = true
+    private suspend fun normalizeAudio(audioSessionId: Int, audioLevel: String) {
+        visualizer = Visualizer(audioSessionId)
+        visualizer?.enabled = true
         val measurementPeakRms = Visualizer.MeasurementPeakRms()
-        visualizer.measurementMode = Visualizer.MEASUREMENT_MODE_PEAK_RMS
+        visualizer?.measurementMode = Visualizer.MEASUREMENT_MODE_PEAK_RMS
 
         if (audioLevel == AudioLevel.DYNAMIC.textDescription) {
             return withContext(Dispatchers.IO) {
                 while(true) {
-                    visualizer.getMeasurementPeakRms(measurementPeakRms)
+                    visualizer?.getMeasurementPeakRms(measurementPeakRms)
                     currentRms = measurementPeakRms.mRms
                     totalRms += currentRms ?: 0
                     numMeasurements++
@@ -123,7 +128,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
 
             return withContext(Dispatchers.IO) {
                 while(true) {
-                    visualizer.getMeasurementPeakRms(measurementPeakRms)
+                    visualizer?.getMeasurementPeakRms(measurementPeakRms)
                     currentRms = measurementPeakRms.mRms
 
                     currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -151,6 +156,8 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Set the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     }
+
+                    delay(80)
                 }
             }
         }
@@ -170,6 +177,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_delete, cancel, intent)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 
         return ForegroundInfo(NOTIFICATION_ID, builder, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)

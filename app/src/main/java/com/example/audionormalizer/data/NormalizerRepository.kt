@@ -5,6 +5,6 @@ import kotlinx.coroutines.flow.Flow
 
 interface NormalizerRepository {
     val outputWorkInfo: Flow<WorkInfo>
-    fun normalizeAudio(audioLevel: String)
+    fun normalizeAudio(audioSessionId: Int, audioLevel: String)
     fun cancelWork()
 }
