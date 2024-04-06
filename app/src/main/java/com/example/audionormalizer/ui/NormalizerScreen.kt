@@ -43,9 +43,11 @@ fun FeatureThatRequiresRecordAudioPermission(
 ) {
     val audioSessionReceiver: BroadcastReceiver = AudioSessionReceiver(normalizerViewModel)
     val filter = IntentFilter(android.media.audiofx.AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
+    // TODO: move this into a lifecycle callback method
     ContextCompat.registerReceiver(LocalContext.current, audioSessionReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
 
     val recordAudioPermissionState = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
+    val postNotificationsPermissionState = rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     val uiState by normalizerViewModel.normalizerUiState.collectAsStateWithLifecycle()
     val audioSessionState by normalizerViewModel.audioSessionState.collectAsState()
 
@@ -98,6 +100,8 @@ fun FeatureThatRequiresRecordAudioPermission(
                         }
                         Button(
                             onClick = {
+                                // It doesn't necessarily matter whether this notification is enabled, but it is more user-friendly since it reminds the user that the app is running
+                                postNotificationsPermissionState.launchPermissionRequest()
                                 normalizerViewModel.normalizeAudio(
                                     audioSessionState.audioSessionId!!,
                                     normalizerViewModel.selectedOption

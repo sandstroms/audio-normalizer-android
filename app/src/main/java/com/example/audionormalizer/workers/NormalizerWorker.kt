@@ -33,7 +33,6 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
     override suspend fun doWork(): Result {
         return try {
             val audioSessionId = inputData.getInt("SESSION_ID", -1)
-//            if (audioSessionId == -1) return Result.failure()
             val audioLevelInput = inputData.getString("AUDIO_LEVEL") ?: return Result.failure()
 
             setForeground(createForegroundInfo(audioLevelInput))
@@ -53,7 +52,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         var noiseFactor: Double
         var totalRms = 0
         var numMeasurements = 0
-        var isNewSong = false
+        var isNewSong: Boolean
         visualizer = Visualizer(audioSessionId)
         visualizer?.enabled = true
         val measurementPeakRms = Visualizer.MeasurementPeakRms()
@@ -69,6 +68,8 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                     averageRms = totalRms.toDouble() / numMeasurements
                     noiseFactor = -(1000 * (-9600 / averageRms + 500))
                     currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+                    isNewSong = currentRms == -9600
 
                     // Raise the volume if the current rms is below a certain threshold
                     if (currentRms < averageRms + noiseFactor && currentRms > -9600 &&
@@ -94,7 +95,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     }
 
-                    delay(250)
+                    delay(80)
                 }
             }
         } else {
@@ -102,19 +103,19 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
             val upperRange: Double
             when (audioLevel) {
                 AudioLevel.VERY_QUIET.textDescription -> {
-                    lowerRange = -9400.0
-                    upperRange = -8200.0
+                    lowerRange = -8400.0
+                    upperRange = -7200.0
                 }
                 AudioLevel.QUIET.textDescription -> {
-                    lowerRange = -8200.0
+                    lowerRange = -8000.0
                     upperRange = -6600.0
                 }
                 AudioLevel.MEDIUM.textDescription -> {
-                    lowerRange = -6600.0
-                    upperRange = -3600.0
+                    lowerRange = -7000.0
+                    upperRange = -4200.0
                 }
                 AudioLevel.LOUD.textDescription -> {
-                    lowerRange = -3600.0
+                    lowerRange = -4000.0
                     upperRange = -1000.0
                 }
                 else -> {
@@ -132,7 +133,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                     isNewSong = currentRms == -9600
 
                     // Raise the volume if the current rms is below a certain threshold
-                    if (((isNewSong && (currentRms < lowerRange)) || (!isNewSong && (currentRms < lowerRange - 1000))) && currentRms > -9600 &&
+                    if (((isNewSong && currentRms < lowerRange) || (!isNewSong && currentRms < lowerRange - 1000)) && currentRms > -9600 &&
                         currentMusicVolume < audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                     ) {
                         audioManager.adjustStreamVolume(
@@ -143,7 +144,7 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Get the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     // Lower the volume if the current rms is above a certain threshold
-                    } else if (((isNewSong && (currentRms > upperRange)) || (!isNewSong && (currentRms > upperRange + 1000))) &&
+                    } else if (((isNewSong && currentRms > upperRange) || (!isNewSong && currentRms > upperRange + 1000)) &&
                         currentMusicVolume > audioManager.getStreamMinVolume(AudioManager.STREAM_MUSIC) + 1
                     ) {
                         audioManager.adjustStreamVolume(
@@ -154,6 +155,8 @@ class NormalizerWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                         // Set the current music volume since it was adjusted
                         currentMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     }
+
+                    delay(80)
                 }
             }
         }
